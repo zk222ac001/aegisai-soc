@@ -14,6 +14,12 @@ from app.detection.packet_sniffer import start_sniffing
 
 from app.ai.anomaly_detector import detector
 
+# For stats endpoint
+from app.api.stats import router as stats_router
+
+# For timeline endpoint
+from app.api.timeline import router as timeline_router
+
 # Load or train the anomaly detection model at startup
 detector.load_model()
 
@@ -28,29 +34,21 @@ sniff_thread = None
 async def lifespan(app: FastAPI):
 
     print("[*] Starting AI SOC Platform...")
-
     # Start async background task
     alert_task = asyncio.create_task(generate_alerts())
     background_tasks.append(alert_task)
-
     # Start packet sniffer thread
     global sniff_thread
-
     sniff_thread = threading.Thread(
         target=start_sniffing,
         daemon=True
     )
-
     sniff_thread.start()
-
     yield
-
     print("[*] Shutting down AI SOC Platform...")
-
     # Cancel async tasks gracefully
     for task in background_tasks:
         task.cancel()
-
     await asyncio.gather(*background_tasks, return_exceptions=True)
 
 
@@ -77,8 +75,8 @@ app.add_middleware(
 # Routers
 app.include_router(alert_router)
 app.include_router(websocket_router)
-
-
+app.include_router(stats_router)
+app.include_router(timeline_router)
 @app.get("/")
 async def root():
     return {
