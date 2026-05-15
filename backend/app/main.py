@@ -12,6 +12,10 @@ from app.websocket.routes import router as websocket_router
 from app.services.alert_generator import generate_alerts
 from app.detection.packet_sniffer import start_sniffing
 
+from app.ai.anomaly_detector import detector
+
+# Load or train the anomaly detection model at startup
+detector.load_model()
 
 # Store background task references
 background_tasks = []
@@ -19,7 +23,7 @@ background_tasks = []
 # Store sniffing thread reference
 sniff_thread = None
 
-
+# Note: In production, consider using a more robust task management system (e.g., Celery) and proper thread management for the sniffer.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
 

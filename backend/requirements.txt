@@ -18,3 +18,7 @@ transformers
 openai 
 python-multipart
 psutil
+scikit-learn
+joblib
+pandas
+numpy  

@@ -5,6 +5,9 @@ from app.detection.rules import detect_suspicious_ports
 from app.detection.port_scan import detect_port_scan
 from app.detection.flow_tracker import track_flow
 
+from app.ai.feature_extractor import extract_features
+from app.ai.anomaly_detector import detector
+
 from datetime import datetime, timezone
 import asyncio
 
@@ -14,7 +17,7 @@ from app.websocket.manager import manager
 main_loop = asyncio.get_event_loop()
 
 async def process_packet(packet):
-    try:
+    try:        
         if detect_suspicious_ports(packet[IP].dport):
             severity = "high"
             attack_type = "Suspicious Port Access"  
@@ -47,6 +50,20 @@ async def process_packet(packet):
                packet[TCP].sport if packet.haslayer(TCP) else packet[UDP].sport,
                packet[TCP].dport if packet.haslayer(TCP) else packet[UDP].dport
         )
+        features = extract_features(
+            packet[IP].sport,
+            packet[IP].dport,
+            protocol,
+            packet_count
+            )
+        
+        ai_result = detector.predict(features)
+        ai_anomaly = ai_result["anomaly"]
+        ai_score = ai_result["score"]
+        if ai_anomaly:
+            severity = "critical"
+            attack_type = "AI Anomaly Detected"
+        
         alert = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "source_ip": ip_layer.src,
@@ -56,7 +73,9 @@ async def process_packet(packet):
             "attack_type": attack_type,
             "description": "Packet captured",
             "packet_count" : packet_count,
-            "status": "open"
+            "status": "open",
+            "ai_score": ai_score,
+            "ai_anomaly": ai_anomaly
         }
 
         print(alert)
