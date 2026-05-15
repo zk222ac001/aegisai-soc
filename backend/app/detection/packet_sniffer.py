@@ -1,6 +1,10 @@
 from scapy.all import sniff
 from scapy.layers.inet import IP, TCP, UDP
 
+from app.detection.rules import detect_suspicious_ports
+from app.detection.port_scan import detect_port_scan
+from app.detection.flow_tracker import track_flow
+
 from datetime import datetime, timezone
 import asyncio
 
@@ -11,6 +15,12 @@ main_loop = asyncio.get_event_loop()
 
 async def process_packet(packet):
     try:
+        if detect_suspicious_ports(packet[IP].dport):
+            severity = "high"
+            attack_type = "Suspicious Port Access"  
+        else:
+            severity = "low"
+            attack_type = "Network Traffic"
         # Ignore non-IP packets early
         if not packet.haslayer(IP):
             return
@@ -27,14 +37,26 @@ async def process_packet(packet):
         else:
             protocol = "OTHER"
 
+        if detect_port_scan(ip_layer.src, ip_layer.dport):
+            severity = "high"
+            attack_type = "Port Scan Detected"
+
+        packet_count = track_flow(
+               ip_layer.src,
+               ip_layer.dst,
+               packet[TCP].sport if packet.haslayer(TCP) else packet[UDP].sport,
+               packet[TCP].dport if packet.haslayer(TCP) else packet[UDP].dport
+        )
         alert = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "source_ip": ip_layer.src,
             "destination_ip": ip_layer.dst,
             "protocol": protocol,
-            "severity": "low",
-            "attack_type": "Network Traffic",
-            "description": "Packet captured"
+            "severity": severity,
+            "attack_type": attack_type,
+            "description": "Packet captured",
+            "packet_count" : packet_count,
+            "status": "open"
         }
 
         print(alert)
