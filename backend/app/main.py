@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+
 from contextlib import asynccontextmanager
 
 import asyncio
@@ -20,6 +21,12 @@ from app.api.stats import router as stats_router
 # For timeline endpoint
 from app.api.timeline import router as timeline_router
 
+from app.core.database import Base, engine
+from app.models.alert import Alert  # important: register model
+
+# Create database tables
+Base.metadata.create_all(bind=engine)
+
 # Load or train the anomaly detection model at startup
 detector.load_model()
 
@@ -34,11 +41,14 @@ sniff_thread = None
 async def lifespan(app: FastAPI):
 
     print("[*] Starting AI SOC Platform...")
+    
     # Start async background task
     alert_task = asyncio.create_task(generate_alerts())
     background_tasks.append(alert_task)
+    
     # Start packet sniffer thread
     global sniff_thread
+    
     sniff_thread = threading.Thread(
         target=start_sniffing,
         daemon=True
@@ -56,6 +66,8 @@ app = FastAPI(
     title="AI SOC Platform",
     lifespan=lifespan
 )
+
+
 
 # Better production CORS config
 app.add_middleware(
@@ -82,4 +94,4 @@ async def root():
     return {
         "status": "running",
         "platform": "AI SOC Dashboard"
-    }
+    }   

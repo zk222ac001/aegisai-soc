@@ -13,7 +13,6 @@ import asyncio
 
 from app.websocket.manager import manager
 
-from app.core.database import SessionLocal
 from app.services.alert_service import save_alert
 
 
@@ -37,7 +36,7 @@ async def process_packet(packet):
 
         severity = "low"
         attack_type = "Normal Traffic"
-
+        
         # -------------------------------------------------
         # Step 2: Protocol detection + safe ports
         # -------------------------------------------------
@@ -119,10 +118,9 @@ async def process_packet(packet):
         # Step 8: Logging + DB
         # -------------------------------------------------
         print(alert)
-
-        db = SessionLocal()
-        save_alert(db, alert)
-        db.close()
+        
+        save_alert(alert)
+       
 
         # -------------------------------------------------
         # Step 9: WebSocket broadcast

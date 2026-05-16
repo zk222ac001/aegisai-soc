@@ -1,44 +1,31 @@
 import os
 import logging
 import threading
-import time
 
 import joblib
 import numpy as np
 
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
+
 # =========================================================
 # Logging
 # =========================================================
+
 logger = logging.getLogger(__name__)
+
 # =========================================================
 # Paths
 # =========================================================
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-MODEL_DIR = os.path.join(
-    BASE_DIR,
-    "..",
-    "..",
-    "ml_models"
-)
-
-MODEL_PATH = os.path.join(
-    MODEL_DIR,
-    "isolation_forest.pkl"
-)
-
-SCALER_PATH = os.path.join(
-    MODEL_DIR,
-    "scaler.pkl"
-)
-
+MODEL_DIR = os.path.join(BASE_DIR, "..", "..", "ml_models")
+MODEL_PATH = os.path.join(MODEL_DIR, "isolation_forest.pkl")
+SCALER_PATH = os.path.join(MODEL_DIR, "scaler.pkl")
 # =========================================================
 # Constants
 # =========================================================
-
-DEFAULT_CONTAMINATION = 0.03
+DEFAULT_CONTAMINATION = 0.02
 TRAINING_SAMPLES = 10000
 RANDOM_STATE = 42
 
@@ -47,66 +34,45 @@ SUPPORTED_PROTOCOLS = {
     "UDP": 2,
     "ICMP": 3
 }
-
 # =========================================================
 # Anomaly Detector
 # =========================================================
-
 class AnomalyDetector:
     def __init__(self):
+
         self.lock = threading.RLock()
-        self.is_trained = False
         self.model = IsolationForest(
-            n_estimators=300,
+            n_estimators=200,
             contamination=DEFAULT_CONTAMINATION,
             random_state=RANDOM_STATE,
             n_jobs=-1,
-            bootstrap=True,
-            verbose=0
+            bootstrap=True
         )
         self.scaler = StandardScaler()
+        self.is_trained = False
+        # Ensure model directory exists
+        os.makedirs(MODEL_DIR, exist_ok=True)
     # =====================================================
-    # Training Data Generation
+    # Generate Training Data
     # =====================================================
+
     @staticmethod
-    def generate_training_data(
-        samples=TRAINING_SAMPLES
-    ):
+    def generate_training_data(samples=TRAINING_SAMPLES):
+        np.random.seed(RANDOM_STATE)
+
         training_data = np.column_stack([
             # Source Port
-            np.random.randint(
-                1024,
-                65535,
-                size=samples
-            ),
+            np.random.randint(1024, 65535, size=samples),
             # Destination Port
-            np.random.choice(
-                [80, 443, 53, 22],
-                size=samples
-            ),
+            np.random.choice([80, 443, 53, 22, 8080], size=samples),
             # Protocol
-            np.random.choice(
-                [1, 2, 3],
-                size=samples
-            ),
+            np.random.choice([1, 2, 3], size=samples),
             # Packet Count
-            np.random.randint(
-                1,
-                100,
-                size=samples
-            ),
-            # Flow Duration (ms)
-            np.random.randint(
-                1,
-                5000,
-                size=samples
-            ),
-            # Bytes Transferred
-            np.random.randint(
-                64,
-                1500,
-                size=samples
-            )
+            np.random.randint(1, 50, size=samples),
+            # Flow Duration
+            np.random.randint(1, 5000, size=samples),
+            # Bytes
+            np.random.randint(64, 5000, size=samples)
         ]).astype(np.float32)
         return training_data
     # =====================================================
@@ -115,24 +81,10 @@ class AnomalyDetector:
     def train(self):
         with self.lock:
             try:
-                logger.info(
-                    "[AI] Training Isolation Forest model..."
-                )
-                os.makedirs(
-                    MODEL_DIR,
-                    exist_ok=True
-                )
-                training_data = (
-                    self.generate_training_data()
-                )
-                scaled_data = (
-                    self.scaler.fit_transform(
-                        training_data
-                    )
-                )
-                self.model.fit(
-                    scaled_data
-                )
+                logger.info("[AI] Training model...")
+                training_data = self.generate_training_data()
+                scaled_data = self.scaler.fit_transform(training_data)
+                self.model.fit(scaled_data)
                 # Save model
                 joblib.dump(
                     self.model,
@@ -146,13 +98,10 @@ class AnomalyDetector:
                     compress=3
                 )
                 self.is_trained = True
-                logger.info(
-                    "[AI] Model training completed."
-                )
+                logger.info("[AI] Training complete")
+
             except Exception as e:
-                logger.exception(
-                    f"[AI] Training failed: {e}"
-                )
+                logger.exception(f"[AI] Training failed: {e}")
                 raise
     # =====================================================
     # Load Model
@@ -160,73 +109,85 @@ class AnomalyDetector:
     def load_model(self):
         with self.lock:
             try:
-                model_exists = os.path.exists(MODEL_PATH)
-                scaler_exists = os.path.exists(SCALER_PATH)
-                if model_exists and scaler_exists:
+                if os.path.exists(MODEL_PATH) and os.path.exists(SCALER_PATH):
                     self.model = joblib.load(MODEL_PATH)
                     self.scaler = joblib.load(SCALER_PATH)
                     self.is_trained = True
-                    logger.info("[AI] Model loaded successfully.")
+                    logger.info("[AI] Model loaded")
                 else:
-                    logger.warning("[AI] Model not found. Training new model.")
+                    logger.warning("[AI] Model not found, training new model")
                     self.train()
             except Exception as e:
-                logger.exception(
-                    f"[AI] Model loading failed: {e}"
-                )
+                logger.exception(f"[AI] Load failed: {e}")
                 raise
     # =====================================================
     # Feature Builder
     # =====================================================
     @staticmethod
     def build_features(
-        *,
-        source_port,
-        destination_port,
-        protocol,
-        packet_count,
-        flow_duration,
-        bytes_transferred
+        source_port=0,
+        destination_port=0,
+        protocol="TCP",
+        packet_count=0,
+        flow_duration=0,
+        bytes_transferred=0
     ):
-        
-        protocol_value = (SUPPORTED_PROTOCOLS.get(str(protocol).upper(),0))        
+
+        protocol_value = SUPPORTED_PROTOCOLS.get(
+            str(protocol).upper(),
+            0
+        )
         features = np.array([
-            source_port or 0,
-            destination_port or 0,
-            protocol_value,
-            packet_count or 0,
-            flow_duration or 0,
-            bytes_transferred or 0
+
+            int(source_port or 0),
+            int(destination_port or 0),
+            int(protocol_value),
+            int(packet_count or 0),
+            int(flow_duration or 0),
+            int(bytes_transferred or 0)
+
         ], dtype=np.float32)
+
         return features
     # =====================================================
     # Predict
     # =====================================================
+
     def predict(self, features):
+
         if not self.is_trained:
             self.load_model()
         try:
             with self.lock:
-                features = np.asarray([features],dtype=np.float32)
-                logger.debug(f"[AI] Features: {features}")
-                logger.debug(f"[AI] Feature count:"f"{features.shape[1]}")
-                logger.debug(f"[AI] Scaler expects: "f"{self.scaler.n_features_in_}")
-                scaled_features = (self.scaler.transform(features))
-                prediction = (self.model.predict(scaled_features))
-                raw_score = (self.model.decision_function(scaled_features)[0])
-                anomaly = (prediction[0] == -1)                
-                # SOC-friendly score
-                ai_score = round(float(np.clip((1 - raw_score) * 100,0,100)),2)
-                risk_score = min(int(ai_score),100)     
+                features = np.asarray(
+                    [features],
+                    dtype=np.float32
+                )
+                # Scale
+                scaled_features = self.scaler.transform(features)
+                # Prediction
+                prediction = self.model.predict(scaled_features)
+                # Raw score
+                raw_score = self.model.decision_function(scaled_features)[0]
+                # Convert NumPy bool -> Python bool
+                anomaly = bool(prediction[0] == -1)
+                # Better scoring logic
+                normalized_score = max(
+                    0,
+                    min(
+                        100,
+                        int((1 - raw_score) * 50)
+                    )
+                )
                 return {
+
                     "anomaly": anomaly,
-                    "ai_score": ai_score,
-                    "risk_score": risk_score
+                    "ai_score": float(normalized_score),
+                    "risk_score": int(normalized_score)
                 }
         except Exception as e:
-            logger.exception(
-                f"[AI] Prediction failed: {e}"
-            )
+
+            logger.exception(f"[AI] Prediction failed: {e}")
             return {
                 "anomaly": False,
                 "ai_score": 0.0,
@@ -234,19 +195,17 @@ class AnomalyDetector:
                 "error": str(e)
             }
     # =====================================================
-    # Health Check
+    # Health
     # =====================================================
+
     def health(self):
         return {
-            "trained": self.is_trained,
-            "model_exists": os.path.exists(
-                MODEL_PATH
-            ),
-            "scaler_exists": os.path.exists(
-                SCALER_PATH
-            )
+            "trained": bool(self.is_trained),
+            "model_exists": os.path.exists(MODEL_PATH),
+            "scaler_exists": os.path.exists(SCALER_PATH)
         }
+
 # =========================================================
-# Singleton Instance
+# Singleton
 # =========================================================
 detector = AnomalyDetector()
