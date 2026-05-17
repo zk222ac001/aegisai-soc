@@ -22,3 +22,5 @@ scikit-learn
 joblib
 pandas
 numpy  
+requests
+geoips

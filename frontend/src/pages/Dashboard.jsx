@@ -1,4 +1,4 @@
-import AlertTable from "../components/AlertTable";
+//import AlertTable from "../components/AlertTable";
 import StatsCards from "../components/StatsCards";
 import LiveFeed from "../components/LiveFeed";
 
@@ -9,10 +9,10 @@ export default function Dashboard() {
       <h1 className="text-4xl font-bold mb-6">
         AI SOC Dashboard
       </h1>
-      <StatsCards />
+      <StatsCards /> 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
         <LiveFeed />
-        <AlertTable />
+        {/* <AlertTable /> */}
       </div>
     </div>
   );
